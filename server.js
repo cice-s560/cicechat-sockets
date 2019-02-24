@@ -12,28 +12,49 @@ wss.broadcast = function broadcast(data) {
   });
 };
 
-function translateMessage(data) {
-  data = JSON.parse(data);
-
+function broadcastMessage(data) {
+  const payload = data.payload;
   switch (data.type) {
     case "CONNECTION":
-      wss.broadcast(
-        JSON.stringify({ type: "USER_CONNECTED", payload: data.payload })
-      );
+      wss.broadcast(packData("USER_CONNECTED", payload));
       break;
     case "MESSAGE":
-      wss.broadcast(
-        JSON.stringify({ type: "MESSAGE_RECEIVED", payload: data.payload })
-      );
+      wss.broadcast(packData("MESSAGE_RECEIVED", payload));
       break;
+    case 'CONNECTION_CLOSED':
+      wss.broadcast(packData("USER_DISCONNECTED", payload));
   }
 }
 
 wss.on("connection", function connection(ws) {
-  console.log(chalk.bgGreen("Conexion!"));
-
+  log("New connection established", 'bgGreen');
+  let username;
   ws.on("message", function incoming(message) {
-    console.log(chalk.magenta("received:", message));
-    translateMessage(message);
+    message = JSON.parse(message);
+    if (message.type === 'CONNECTION') {
+      username = message.payload.username;
+      log(`${ username } says hello`, 'magenta');
+    } else {
+      log(`New message from ${ username }`, 'magenta');
+    }
+    broadcastMessage(message);
+  });
+  ws.on('close', () => {
+    log(`${ username } disconnected`, 'bgRed');
+    broadcastMessage({
+      type: 'CONNECTION_CLOSED',
+      payload: { username }
+    });
   });
 });
+
+function log(data, colour) {
+  if (!chalk[colour]) {
+    return console.log(`> ${ new Date().toISOString() }: ${ data }`);
+  }
+  console.log(chalk[colour](`> ${ new Date().toISOString() }: ${data} `));
+}
+
+function packData(type, payload) {
+  return JSON.stringify({ type, payload });
+}
